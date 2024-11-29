@@ -25,7 +25,7 @@ fn trisphere(x: f32, y: f32, radius: f32, segment: usize) void {
     gl.glEnd();
 }
 
-pub fn draw(_: *std.ArrayList(phy.particle)) void {
+pub fn draw(_: *std.ArrayList(phy.particle), lock: *std.Thread.Mutex, running: *bool) void {
     if (glfw.glfwInit() == 0) {
         std.log.err("Failed to initialize GLFW", .{});
         return;
@@ -53,6 +53,9 @@ pub fn draw(_: *std.ArrayList(phy.particle)) void {
 
     // Main loop
     while (glfw.glfwWindowShouldClose(window) == 0) {
+        lock.*.lock();
+        defer lock.*.unlock();
+        _ = running.*;
         // Clear the screen
         gl.glClearColor(0.2, 0.3, 0.3, 1.0);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);

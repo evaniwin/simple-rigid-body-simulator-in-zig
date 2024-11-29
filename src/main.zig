@@ -12,8 +12,10 @@ pub fn main() !void {
     defer particlelist.deinit();
     try particlelist.append(phy.particle{});
     try phy.printparticle(particlelist);
-    const renderthread = try thread.spawn(.{}, graphics.draw, .{&particlelist});
-    thread.join(renderthread);
-    const solverthread = try thread.spawn(.{}, phy.solve, .{&particlelist});
-    thread.join(solverthread);
+    var running: bool = true;
+    var lock = thread.Mutex{};
+    const renderthread = try thread.spawn(.{}, graphics.draw, .{ &particlelist, &lock, &running });
+    defer thread.join(renderthread);
+    const solverthread = try thread.spawn(.{}, phy.solve, .{ &particlelist, &lock, &running });
+    defer thread.join(solverthread);
 }

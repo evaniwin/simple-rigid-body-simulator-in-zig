@@ -23,7 +23,12 @@ pub fn printparticle(particles: std.ArrayList(particle)) !void {
     }
 }
 
-pub fn solve(_: *std.ArrayList(particle)) void {}
+pub fn solve(_: *std.ArrayList(particle), lock: *std.Thread.Mutex, running: *bool) void {
+    std.debug.print("Thread started", .{});
+    lock.*.lock();
+    defer lock.*.unlock();
+    _ = running.*;
+}
 
 test "basic add functionality" {
     try std.testing.expect(true);
