@@ -4,115 +4,152 @@
 const std = @import("std");
 const main = @import("main.zig");
 const math = std.math;
+const time = std.time;
 
-pub const simstep = 30;
+pub var simboundry: [2]c_int = [2]c_int{ 800, 1280 };
+pub const drag: f64 = 2.0;
+const recoil: f64 = 1.0;
 
-pub const particle = struct {
-    position: [2]f32 = [2]f32{ 0.0, 0.0 },
-    velocity: [2]f32 = [2]f32{ 0, 0 },
-    force: [2]f32 = [2]f32{ 0, 0 },
-    radius: f32 = 10,
-    drag: f32 = 0.01,
+pub const point = struct {
+    position: [2]f64 = .{ 0, 0 },
 };
-fn printarray(list: [2]f32) !void {
+
+pub const pointattribute = struct {
+    velocity: [2]f64 = [2]f64{ 0, 0 },
+    force: [2]f64 = [2]f64{ 0, 0 },
+    radius: f64 = 0.1,
+};
+fn printarray(list: [2]f64) !void {
     for (list) |value| {
         std.debug.print("{}  ", .{value});
     }
     std.debug.print("\n", .{});
 }
-pub fn printparticle(particles: std.ArrayList(particle)) !void {
-    for (particles.items, 0..) |value, i| {
+pub fn printparticle() !void {
+    for (0..main.pointlistptrattribute.*.items.len) |i| {
         std.debug.print("----------Particle {}\n", .{i});
-        try printarray(value.position);
-        try printarray(value.velocity);
-        try printarray(value.force);
+        try printarray(main.pointlistptrread.items[i].position);
+        try printarray(main.pointlistptrwrite.items[i].position);
+        try printarray(main.pointlistptrattribute.items[i].velocity);
+        try printarray(main.pointlistptrattribute.items[i].force);
     }
 }
-
-fn forcecollision(particlelist: *std.ArrayList(particle), ind: usize) void {
-    for (particlelist.*.items) |part| {
-        const vecx = part.position[0] - particlelist.*.items[ind].position[0];
-        const vecy = part.position[1] - particlelist.*.items[ind].position[1];
-        const dist = math.sqrt(math.pow(f32, vecx, 2) + math.pow(f32, vecy, 2));
-        const radiustoradius = particlelist.*.items[ind].radius + part.radius;
-        if (dist < 2 * radiustoradius) {
-            particlelist.*.items[ind].force[0] = particlelist.*.items[ind].force[0] + (dist - radiustoradius) * vecx;
-            particlelist.*.items[ind].force[1] = particlelist.*.items[ind].force[1] + (dist - radiustoradius) * vecy;
+///calculates the the collision of particle
+fn forcecollision(ind: usize) void {
+    for (main.pointlistptrread.*.items, 0..) |_, i| {
+        //using distance formula calculate distance between two particles
+        const vec: [2]f64 = [2]f64{ main.pointlistptrread.*.items[i].position[0] - main.pointlistptrread.*.items[ind].position[0], main.pointlistptrread.*.items[i].position[1] - main.pointlistptrread.*.items[ind].position[1] };
+        const dist = math.sqrt(math.pow(f64, vec[0], 2) + math.pow(f64, vec[1], 2));
+        //get the sum of the radius of the two particles
+        const radiustoradius = main.pointlistptrattribute.*.items[ind].radius + main.pointlistptrattribute.*.items[i].radius;
+        //check if boundry of two particles are touching then apply repulsion
+        if (dist < radiustoradius) {
+            for (0..2) |j| {
+                main.pointlistptrattribute.*.items[ind].force[j] = main.pointlistptrattribute.*.items[ind].force[j] + (dist - radiustoradius) * vec[j];
+            }
         }
     }
 }
 
-fn boundrycollition(particlelist: *std.ArrayList(particle), ind: usize) void {
-    const rebound: f32 = 0.2;
-    const boundry: f32 = 1 - particlelist.*.items[ind].radius;
-    var force: [2]f32 = undefined;
-    if (particlelist.*.items[ind].position[0] > boundry) {
-        force[0] = -rebound;
-        if (particlelist.*.items[ind].velocity[0] > 0) {
-            particlelist.*.items[ind].velocity[0] = -particlelist.*.items[ind].velocity[0];
-        }
-    } else if (particlelist.*.items[ind].position[0] < (-boundry)) {
-        force[0] = rebound;
-        if (particlelist.*.items[ind].velocity[0] < 0) {
-            particlelist.*.items[ind].velocity[0] = -particlelist.*.items[ind].velocity[0];
+/// 'boundrycollition' Calculates collision with boundry
+fn boundrycollition(ind: usize, timestep: f64) void {
+    //Adust the boundry so when the surface of the sphere touches the boundry collision occours
+    const boundary: [2]f64 = [2]f64{ @as(f64, @floatFromInt(simboundry[0])) - main.pointlistptrattribute.*.items[ind].radius, @as(f64, @floatFromInt(simboundry[1])) - main.pointlistptrattribute.*.items[ind].radius };
+    var force: [2]f64 = [2]f64{ 0, 0 };
+    const pos = main.pointlistptrread.*.items[ind].position;
+    //calculates rebound
+    for (0..2) |i| {
+        if (pos[i] > boundary[i]) {
+            force[i] = (boundary[i] - pos[i]) * timestep * recoil;
+        } else if (pos[i] < -boundary[i]) {
+            force[i] = -(boundary[i] + pos[i]) * timestep * recoil;
         }
     }
+    addforce(ind, force);
+}
 
-    if (particlelist.*.items[ind].position[1] > boundry) {
-        force[1] = -rebound;
-        if (particlelist.*.items[ind].velocity[1] > 0) {
-            particlelist.*.items[ind].velocity[1] = -particlelist.*.items[ind].velocity[1];
-        }
-    } else if (particlelist.*.items[ind].position[1] < (-boundry)) {
-        force[1] = rebound;
-        if (particlelist.*.items[ind].velocity[1] < 0) {
-            particlelist.*.items[ind].velocity[1] = -particlelist.*.items[ind].velocity[1];
-        }
+fn forcedrag(ind: usize, timestep: f64) void {
+    for (0..2) |i| {
+        main.pointlistptrattribute.*.items[ind].velocity[i] = main.pointlistptrattribute.*.items[ind].velocity[i] - main.pointlistptrattribute.*.items[ind].velocity[i] * timestep / drag;
     }
 }
 
-fn forcedrag(particlelist: *std.ArrayList(particle), ind: usize) void {
-    particlelist.*.items[ind].velocity[0] = particlelist.*.items[ind].velocity[0] * particlelist.*.items[ind].drag;
-    particlelist.*.items[ind].velocity[1] = particlelist.*.items[ind].velocity[1] * particlelist.*.items[ind].drag;
-}
-
-fn velcalc(particlelist: *std.ArrayList(particle), ind: usize) void {
-    //converts force to velocity
-    particlelist.*.items[ind].velocity[0] = particlelist.*.items[ind].force[0] / simstep;
-    particlelist.*.items[ind].velocity[1] = particlelist.*.items[ind].force[1] / simstep;
-    //removes force added to velocity
-    particlelist.*.items[ind].force[0] = math.clamp((1 - (1 / simstep)) * particlelist.*.items[ind].force[0], -1, 1);
-    particlelist.*.items[ind].force[1] = math.clamp((1 - (1 / simstep)) * particlelist.*.items[ind].force[1], -1, 1);
-}
-
-pub fn addforce(particlelist: *std.ArrayList(particle), ind: usize, force: [2]f32) void {
-    particlelist.*.items[ind].force[0] = particlelist.*.items[ind].force[0] + force[0];
-    particlelist.*.items[ind].force[1] = particlelist.*.items[ind].force[1] + force[1];
-    try printparticle(particlelist.*);
-}
-
-fn motion(particlelist: *std.ArrayList(particle)) void {
-    for (0..particlelist.*.items.len) |index| {
-        particlelist.*.items[index].position[0] = particlelist.*.items[index].position[0] + particlelist.*.items[index].velocity[0] / simstep;
-        particlelist.*.items[index].position[1] = particlelist.*.items[index].position[1] + particlelist.*.items[index].velocity[1] / simstep;
+fn velcalc(ind: usize, timestep: f64) void {
+    const force: [2]f64 = [2]f64{ main.pointlistptrattribute.*.items[ind].force[0] * timestep, main.pointlistptrattribute.*.items[ind].force[1] * timestep };
+    for (0..2) |i| {
+        //converts force to velocity
+        main.pointlistptrattribute.*.items[ind].velocity[i] = force[i] + main.pointlistptrattribute.*.items[ind].velocity[i];
+        //removes force added to velocity
+        main.pointlistptrattribute.*.items[ind].force[i] = main.pointlistptrattribute.*.items[ind].force[i] - force[i];
     }
 }
-//pub fn solve(_: *std.ArrayList(particle), _: *std.Thread.Mutex) void {}
-pub fn solve(particlelist: *std.ArrayList(particle), lock: *std.Thread.Mutex) void {
-    std.debug.print("Thread started", .{});
+
+pub fn addforce(ind: usize, force: [2]f64) void {
+    for (0..2) |i| {
+        main.pointlistptrattribute.*.items[ind].force[i] = main.pointlistptrattribute.*.items[ind].force[i] + force[i];
+    }
+}
+
+fn motion(timestep: f64) void {
+    for (0..main.pointlistptrattribute.*.items.len) |index| {
+        for (0..2) |i| {
+            main.pointlistptrwrite.*.items[index].position[i] = main.pointlistptrread.*.items[index].position[i] + main.pointlistptrattribute.*.items[index].velocity[i] * timestep;
+        }
+    }
+}
+pub fn solve(lock: *std.Thread.Mutex, clock: *time.Timer) void {
+    std.debug.print("Thread started\n", .{});
     while (main.running) {
-        lock.*.lock();
-        defer lock.*.unlock();
-        for (particlelist.*.items, 0..) |_, i| {
-            forcedrag(particlelist, i);
-            forcecollision(particlelist, i);
-            boundrycollition(particlelist, i);
-            velcalc(particlelist, i);
+        const timestep: f64 = @as(f64, @floatFromInt(clock.*.lap())) * 1e-9;
+        for (main.pointlistptrread.*.items, 0..) |_, i| {
+            forcecollision(i);
+            boundrycollition(i, timestep);
+            velcalc(i, timestep);
+            forcedrag(i, timestep);
+            //time.sleep(10000);
         }
-        motion(particlelist);
+        motion(timestep);
+
+        lock.*.lock();
+        main.flipreadwrite();
+        lock.*.unlock();
     }
 }
 
-test "basic add functionality" {
-    try std.testing.expect(true);
+test "boundrycollition" {
+    const allocator = std.testing.allocator;
+
+    var pointlist_1 = std.ArrayList(point).init(allocator);
+    defer pointlist_1.deinit();
+    main.pointlistptrread = &pointlist_1;
+
+    var pointlist_2 = std.ArrayList(point).init(allocator);
+    defer pointlist_2.deinit();
+    main.pointlistptrwrite = &pointlist_2;
+
+    var pointlist_attrib = std.ArrayList(pointattribute).init(allocator);
+    defer pointlist_attrib.deinit();
+    main.pointlistptrattribute = &pointlist_attrib;
+
+    try main.pointadd(.{ 0, 0 });
+    //test normal state
+    boundrycollition(0);
+    var ref = [2]f64{ 0.0, 0.0 };
+    try std.testing.expect(std.mem.eql(f64, &pointlist_2.items[0].position, &ref));
+    try std.testing.expect(std.mem.eql(f64, &pointlist_attrib.items[0].velocity, &ref));
+    try std.testing.expect(std.mem.eql(f64, &pointlist_attrib.items[0].force, &ref));
+
+    //test collision top and right
+    pointlist_1.items[0].position = [2]f64{ @as(f64, @floatFromInt(simboundry[0] + 1)) - pointlist_attrib.items[0].radius, @as(f64, @floatFromInt(simboundry[1] + 1)) - pointlist_attrib.items[0].radius };
+
+    boundrycollition(0);
+    ref = [2]f64{ -1.0 / recoil, -1.0 / recoil };
+    try std.testing.expectEqualSlices(f64, &ref, &pointlist_attrib.items[0].force);
+
+    //test collision bottom and left
+    pointlist_1.items[0].position = [2]f64{ -@as(f64, @floatFromInt(simboundry[0] + 1)) + pointlist_attrib.items[0].radius, -@as(f64, @floatFromInt(simboundry[1] + 1)) + pointlist_attrib.items[0].radius };
+    pointlist_attrib.items[0].force = .{ 0.0, 0.0 };
+    boundrycollition(0);
+    ref = [2]f64{ 1.0 / recoil, 1.0 / recoil };
+    try std.testing.expectEqualSlices(f64, &ref, &pointlist_attrib.items[0].force);
 }
