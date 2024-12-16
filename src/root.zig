@@ -6,7 +6,7 @@ const main = @import("main.zig");
 const math = std.math;
 const time = std.time;
 
-pub var simboundry: [2]c_int = [2]c_int{ 800, 1280 };
+pub var simboundry: [2]c_int = [2]c_int{ 800, 1200 };
 pub const drag: f64 = 0.0001;
 const recoil: f64 = 0.9;
 

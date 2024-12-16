@@ -7,7 +7,7 @@ const vulkan = @cImport(@cInclude("vulkan/vulkan.h"));
 const gl = @cImport(@cInclude("GL/gl.h"));
 
 const segments = 16;
-
+var curserpos: [2]f64 = undefined;
 fn key_callback(window: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
     _ = scancode;
     _ = mods;
@@ -18,24 +18,30 @@ fn key_callback(window: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: 
     const step: f64 = 1.0;
     if (action == glfw.GLFW_PRESS) {
         var vect: [2]f64 = .{ 0.0, 0.0 };
-        if ((key == glfw.GLFW_KEY_UP) and (action == glfw.GLFW_PRESS)) {
+        if ((key == glfw.GLFW_KEY_UP)) {
             vect = .{ step, 0.0 };
         }
-        if ((key == glfw.GLFW_KEY_DOWN) and (action == glfw.GLFW_PRESS)) {
+        if ((key == glfw.GLFW_KEY_DOWN)) {
             vect = .{ -step, 0.0 };
         }
-        if ((key == glfw.GLFW_KEY_RIGHT) and (action == glfw.GLFW_PRESS)) {
+        if ((key == glfw.GLFW_KEY_RIGHT)) {
             vect = .{ 0.0, step };
         }
-        if ((key == glfw.GLFW_KEY_LEFT) and (action == glfw.GLFW_PRESS)) {
+        if ((key == glfw.GLFW_KEY_LEFT)) {
             vect = .{ 0.0, -step };
         }
+        if (key == glfw.GLFW_KEY_END) {}
         if (key == glfw.GLFW_KEY_TAB) {
             try phy.printparticle();
         }
-        std.debug.print("key detected {any}\n", .{vect});
         phy.addforce(0, vect);
     }
+}
+
+fn cursor_position_callback(_: ?*glfw.GLFWwindow, xpos: f64, ypos: f64) callconv(.c) void {
+    curserpos[0] = xpos;
+    curserpos[1] = ypos;
+    std.debug.print("{any}\n", .{curserpos});
 }
 
 fn frame_buffer_size_callback(_: ?*glfw.GLFWwindow, widthc: c_int, heightc: c_int) callconv(.C) void {
@@ -92,6 +98,7 @@ pub fn draw(particlelist: *std.ArrayList(phy.point), lock: *std.Thread.Mutex) vo
     _ = glfw.glfwSetErrorCallback(error_callback);
     _ = glfw.glfwSetFramebufferSizeCallback(window, &frame_buffer_size_callback);
     _ = glfw.glfwSetKeyCallback(window, &key_callback);
+    _ = glfw.glfwSetCursorPosCallback(window, &cursor_position_callback);
     // Main loop
     while (glfw.glfwWindowShouldClose(window) == 0 and main.running) {
         // Clear the screen
