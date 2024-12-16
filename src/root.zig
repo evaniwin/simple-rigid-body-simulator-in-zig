@@ -7,8 +7,8 @@ const math = std.math;
 const time = std.time;
 
 pub var simboundry: [2]c_int = [2]c_int{ 800, 1280 };
-pub const drag: f64 = 2.0;
-const recoil: f64 = 1.0;
+pub const drag: f64 = 0.0001;
+const recoil: f64 = 0.9;
 
 pub const point = struct {
     position: [2]f64 = .{ 0, 0 },
@@ -19,6 +19,7 @@ pub const pointattribute = struct {
     force: [2]f64 = [2]f64{ 0, 0 },
     radius: f64 = 0.1,
 };
+
 fn printarray(list: [2]f64) !void {
     for (list) |value| {
         std.debug.print("{}  ", .{value});
@@ -34,6 +35,7 @@ pub fn printparticle() !void {
         try printarray(main.pointlistptrattribute.items[i].force);
     }
 }
+
 ///calculates the the collision of particle
 fn forcecollision(ind: usize) void {
     for (main.pointlistptrread.*.items, 0..) |_, i| {
@@ -52,7 +54,7 @@ fn forcecollision(ind: usize) void {
 }
 
 /// 'boundrycollition' Calculates collision with boundry
-fn boundrycollition(ind: usize, timestep: f64) void {
+fn boundrycollition(ind: usize) void {
     //Adust the boundry so when the surface of the sphere touches the boundry collision occours
     const boundary: [2]f64 = [2]f64{ @as(f64, @floatFromInt(simboundry[0])) - main.pointlistptrattribute.*.items[ind].radius, @as(f64, @floatFromInt(simboundry[1])) - main.pointlistptrattribute.*.items[ind].radius };
     var force: [2]f64 = [2]f64{ 0, 0 };
@@ -60,9 +62,9 @@ fn boundrycollition(ind: usize, timestep: f64) void {
     //calculates rebound
     for (0..2) |i| {
         if (pos[i] > boundary[i]) {
-            force[i] = (boundary[i] - pos[i]) * timestep * recoil;
+            force[i] = (boundary[i] - pos[i]) * recoil;
         } else if (pos[i] < -boundary[i]) {
-            force[i] = -(boundary[i] + pos[i]) * timestep * recoil;
+            force[i] = -(boundary[i] + pos[i]) * recoil;
         }
     }
     addforce(ind, force);
@@ -70,17 +72,16 @@ fn boundrycollition(ind: usize, timestep: f64) void {
 
 fn forcedrag(ind: usize, timestep: f64) void {
     for (0..2) |i| {
-        main.pointlistptrattribute.*.items[ind].velocity[i] = main.pointlistptrattribute.*.items[ind].velocity[i] - main.pointlistptrattribute.*.items[ind].velocity[i] * timestep / drag;
+        main.pointlistptrattribute.*.items[ind].velocity[i] = main.pointlistptrattribute.*.items[ind].velocity[i] - ((main.pointlistptrattribute.*.items[ind].velocity[i] * timestep) * drag);
     }
 }
 
 fn velcalc(ind: usize, timestep: f64) void {
-    const force: [2]f64 = [2]f64{ main.pointlistptrattribute.*.items[ind].force[0] * timestep, main.pointlistptrattribute.*.items[ind].force[1] * timestep };
     for (0..2) |i| {
         //converts force to velocity
-        main.pointlistptrattribute.*.items[ind].velocity[i] = force[i] + main.pointlistptrattribute.*.items[ind].velocity[i];
+        main.pointlistptrattribute.*.items[ind].velocity[i] = main.pointlistptrattribute.*.items[ind].velocity[i] + main.pointlistptrattribute.*.items[ind].force[i] * timestep;
         //removes force added to velocity
-        main.pointlistptrattribute.*.items[ind].force[i] = main.pointlistptrattribute.*.items[ind].force[i] - force[i];
+        main.pointlistptrattribute.*.items[ind].force[i] = 0;
     }
 }
 
@@ -93,22 +94,27 @@ pub fn addforce(ind: usize, force: [2]f64) void {
 fn motion(timestep: f64) void {
     for (0..main.pointlistptrattribute.*.items.len) |index| {
         for (0..2) |i| {
+            //main.pointlistptrwrite.*.items[index].position[i] = math.clamp(main.pointlistptrread.*.items[index].position[i] + main.pointlistptrattribute.*.items[index].velocity[i] * timestep, @as(f64, @floatFromInt(-simboundry[i])) + 20.0, @as(f64, @floatFromInt(simboundry[i])) + 20.0);
             main.pointlistptrwrite.*.items[index].position[i] = main.pointlistptrread.*.items[index].position[i] + main.pointlistptrattribute.*.items[index].velocity[i] * timestep;
         }
+        forcedrag(index, timestep);
     }
 }
-pub fn solve(lock: *std.Thread.Mutex, clock: *time.Timer) void {
+pub fn solve(lock: *std.Thread.Mutex, _: *time.Timer) void {
     std.debug.print("Thread started\n", .{});
     while (main.running) {
-        const timestep: f64 = @as(f64, @floatFromInt(clock.*.lap())) * 1e-9;
+        const timestep: f64 = 1.0 / 1.0;
         for (main.pointlistptrread.*.items, 0..) |_, i| {
             forcecollision(i);
-            boundrycollition(i, timestep);
+            boundrycollition(
+                i,
+            );
             velcalc(i, timestep);
-            forcedrag(i, timestep);
-            //time.sleep(10000);
+            time.sleep(std.time.ns_per_s / 240);
         }
         motion(timestep);
+        //std.debug.print("motion\n", .{});
+        //try printparticle();
 
         lock.*.lock();
         main.flipreadwrite();

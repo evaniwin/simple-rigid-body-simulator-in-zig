@@ -15,7 +15,7 @@ fn key_callback(window: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: 
         glfw.glfwSetWindowShouldClose(window, glfw.GLFW_TRUE);
         main.running = false;
     }
-    const step: f64 = 1e3;
+    const step: f64 = 1.0;
     if (action == glfw.GLFW_PRESS) {
         var vect: [2]f64 = .{ 0.0, 0.0 };
         if ((key == glfw.GLFW_KEY_UP) and (action == glfw.GLFW_PRESS)) {
