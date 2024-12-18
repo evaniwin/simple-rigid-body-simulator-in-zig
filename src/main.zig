@@ -10,9 +10,9 @@ pub var pointlistptrattribute: *std.ArrayList(phy.pointattribute) = undefined;
 
 ///add a new particle to the list
 pub fn pointadd(values: [2]f64) !void {
-    const point = phy.point{ .position = .{ values[0], values[1] } };
-    try pointlistptrread.*.append(point);
-    try pointlistptrwrite.*.append(point);
+    const point: [2]f64 = .{ values[0], values[1] };
+    try pointlistptrread.*.append(phy.point{ .position = point });
+    try pointlistptrwrite.*.append(phy.point{ .position = point });
     try pointlistptrattribute.*.append(phy.pointattribute{});
 }
 
@@ -42,11 +42,13 @@ pub fn main() !void {
 
     //thread and thread mutex
     var lock = thread.Mutex{};
-    const renderthread = try thread.spawn(.{}, graphics.draw, .{ pointlistptrread, &lock });
+    const renderthread = try thread.spawn(.{}, graphics.draw, .{&lock});
     defer thread.join(renderthread);
+    try std.Thread.setName(renderthread, "renderthread");
     var clock: std.time.Timer = try std.time.Timer.start();
     const solverthread = try thread.spawn(.{}, phy.solve, .{ &lock, &clock });
     defer thread.join(solverthread);
+    try std.Thread.setName(solverthread, "solverthread");
 }
 test flipreadwrite {
     try std.testing.expect(true);
