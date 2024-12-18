@@ -136,12 +136,12 @@ pub fn solve(lock: *std.Thread.Mutex, _: *time.Timer) !void {
     defer std.log.info("Solver Thread exited\n", .{});
 
     while (main.running) {
-        const timestep: f64 = 1.0;
+        const timestep: f64 = 0.1;
         for (0..main.pointlistptrattribute.*.items.len) |i| {
             forcecollision(i);
             boundrycollition(i);
             velcalc(i, timestep);
-            //time.sleep(std.time.ns_per_s / 240);
+            time.sleep(std.time.ns_per_s / 240);
         }
         motion(timestep);
         //std.debug.print("motion\n", .{});
