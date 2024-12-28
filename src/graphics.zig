@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = std.math;
-const phy = @import("root.zig");
+const phy = @import("physics.zig");
 const main = @import("main.zig");
 const util = @import("utility.zig");
 const glfw = @cImport(@cInclude("GLFW/glfw3.h"));
@@ -9,11 +9,10 @@ const gl = @cImport(@cInclude("GL/gl.h"));
 const segments = 16;
 var curserpos: [2]f64 = undefined;
 
-fn key_callback(window: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
+fn key_callback(_: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
     _ = scancode;
     _ = mods;
     if ((key == glfw.GLFW_KEY_ESCAPE) and (action == glfw.GLFW_PRESS)) {
-        glfw.glfwSetWindowShouldClose(window, glfw.GLFW_TRUE);
         main.running = false;
     }
     const step: f64 = 1.0;
@@ -58,12 +57,17 @@ fn cursor_position_callback(_: ?*glfw.GLFWwindow, xpos: f64, ypos: f64) callconv
 
 fn frame_buffer_size_callback(_: ?*glfw.GLFWwindow, widthc: c_int, heightc: c_int) callconv(.C) void {
     gl.glViewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
-    phy.simboundry[1] = widthc;
-    phy.simboundry[0] = heightc;
+    phy.simboundry[1] = heightc;
+    phy.simboundry[0] = widthc;
 }
 
 fn error_callback(err: c_int, decsription: [*c]const u8) callconv(.C) void {
     std.debug.print("glfw error code{d}--{s}", .{ err, decsription });
+}
+
+var windowstatechange: bool = false;
+fn window_maximize_callback(_: ?*glfw.GLFWwindow, _: c_int) callconv(.c) void {
+    windowstatechange = true;
 }
 
 fn trisphere(rawx: f32, rawy: f32, radius: f32, segment: usize) void {
@@ -80,6 +84,17 @@ fn trisphere(rawx: f32, rawy: f32, radius: f32, segment: usize) void {
         gl.glVertex2f(cx / boundry[0], cy / boundry[1]);
     }
     gl.glEnd();
+}
+
+fn windowhandler(window: ?*glfw.GLFWwindow) void {
+    if (glfw.glfwWindowShouldClose(window) != 0) {
+        std.log.warn("stop condition", .{});
+        main.running = false;
+    }
+    if (windowstatechange) {
+        glfw.glfwGetFramebufferSize(window, &phy.simboundry[0], &phy.simboundry[1]);
+        windowstatechange = false;
+    }
 }
 
 pub fn draw(lock: *std.Thread.Mutex) void {
@@ -110,11 +125,12 @@ pub fn draw(lock: *std.Thread.Mutex) void {
     glfw.glfwSwapInterval(1);
     //set various callback functions
     _ = glfw.glfwSetErrorCallback(error_callback);
-    _ = glfw.glfwSetFramebufferSizeCallback(window, &frame_buffer_size_callback);
+    //_ = glfw.glfwSetFramebufferSizeCallback(window, &frame_buffer_size_callback);
     _ = glfw.glfwSetKeyCallback(window, &key_callback);
     _ = glfw.glfwSetCursorPosCallback(window, &cursor_position_callback);
+    //_ = glfw.glfwSetWindowMaximizeCallback(window, &window_maximize_callback);
     // Main loop
-    while (glfw.glfwWindowShouldClose(window) == 0 and main.running) {
+    while (main.running) {
         // Clear the screen
         gl.glClearColor(0.0, 0.1, 0.3, 1.0);
         gl.glClear(gl.GL_COLOR_BUFFER_BIT);
@@ -129,6 +145,10 @@ pub fn draw(lock: *std.Thread.Mutex) void {
         // Swap buffers and poll events
         glfw.glfwSwapBuffers(window);
         glfw.glfwPollEvents();
+        std.time.sleep(10000);
+        windowhandler(window);
+        glfw.glfwGetFramebufferSize(window, &phy.simboundry[0], &phy.simboundry[1]);
+        gl.glViewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
     }
 }
 test "tester" {

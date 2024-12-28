@@ -1,6 +1,6 @@
 const std = @import("std");
 const math = std.math;
-const phy = @import("root.zig");
+const phy = @import("physics.zig");
 const graphics = @import("graphics.zig");
 const thread = std.Thread;
 pub var running: bool = true;
