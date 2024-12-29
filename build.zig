@@ -45,10 +45,25 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Choose the OpenGL API, version, profile and extensions you want to generate bindings for.
+    const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
+        .api = .gl,
+        .version = .@"3.2",
+        .profile = .compatibility,
+        .extensions = &.{},
+    });
+
+    // Use mach-glfw
+    const glfw_dep = b.dependency("mach-glfw", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    // Import the generated module.
+    exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
+    exe.root_module.addImport("gl", gl_bindings);
+
     exe.linkLibC();
-    exe.linkSystemLibrary("GL");
-    exe.linkSystemLibrary("vulkan");
-    exe.linkSystemLibrary("glfw");
+    exe.linkSystemLibrary("freetype2");
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
