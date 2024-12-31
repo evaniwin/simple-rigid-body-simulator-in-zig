@@ -130,8 +130,6 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     //element buffer object
     gl.GenBuffers(16, &EBO);
 
-    var programrect = util.Shader{};
-    programrect.init(util.vertexshadersource2, util.fragmentshadersource2);
     var programsphere = util.Shader{};
     programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
     const screen = gl.GetUniformLocation(programsphere.program, "screen");
