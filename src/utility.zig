@@ -59,9 +59,7 @@ pub const Shader = struct {
 };
 
 //load shaders source
-pub const vertexshadersource = @embedFile("shader/text.vert");
-pub const fragmentshadersource = @embedFile("shader/text.frag");
-pub const vertexshadersource2 = @embedFile("shader/tri.vert");
-pub const fragmentshadersource2 = @embedFile("shader/tri.frag");
+//pub const vertexshadersource = @embedFile("shader/text.vert");
+//pub const fragmentshadersource = @embedFile("shader/text.frag");
 pub const vertexshadersphere = @embedFile("shader/sphere.vert");
 pub const fragmentshadersphere = @embedFile("shader/sphere.frag");

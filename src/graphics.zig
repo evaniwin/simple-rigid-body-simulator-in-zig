@@ -56,7 +56,7 @@ fn cursorposcallback(_: glfw.Window, xpos: f64, ypos: f64) void {
     const converted = [2]f64{ @as(f64, @floatFromInt(phy.simboundry[0])), @as(f64, @floatFromInt(phy.simboundry[1])) };
     curserpos[0] = @floatCast((2 * xpos) - converted[0]);
     curserpos[1] = @floatCast(-((2 * ypos) - converted[1]));
-    std.debug.print("{any}\n", .{curserpos});
+    //std.debug.print("{any}\n", .{curserpos});
 }
 
 fn errorcallback(err: glfw.ErrorCode, decsription: [:0]const u8) void {
@@ -201,8 +201,8 @@ fn sphereinit(segments: usize) void {
 fn drawspheres(program: *util.Shader, screen: c_int) void {
     gl.BindVertexArray(VAO[1]);
     gl.BindBuffer(gl.ARRAY_BUFFER, VBO[2]);
-    //gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * main.pointlistptrread.*.items.len), &main.pointlistptrread.*.items[0], gl.STATIC_DRAW);
-    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf([2]f32), &curserpos, gl.STATIC_DRAW);
+    gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * main.pointlistptrread.*.items.len), &main.pointlistptrread.*.items[0], gl.STATIC_DRAW);
+    //gl.BufferData(gl.ARRAY_BUFFER, @sizeOf([2]f32), &curserpos, gl.STATIC_DRAW);
     gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, @sizeOf([2]f32), 0);
     gl.EnableVertexAttribArray(1);
     gl.VertexAttribDivisor(1, 1);
@@ -210,30 +210,6 @@ fn drawspheres(program: *util.Shader, screen: c_int) void {
     program.*.use();
     gl.Uniform2f(screen, @floatFromInt(phy.simboundry[0]), @floatFromInt(phy.simboundry[1]));
     gl.DrawElementsInstanced(gl.TRIANGLES, 48, gl.UNSIGNED_INT, @ptrFromInt(0), @intCast(main.pointlistptrread.items.len));
-}
-
-fn drawrect(program: *util.Shader) void {
-    //declare vertices and indexes
-    const vertices: [4][3]f32 = .{
-        .{ 0.5, 0.5, 0.0 },
-        .{ 0.5, -0.5, 0.0 },
-        .{ -0.5, -0.5, 0.0 },
-        .{ -0.5, 0.5, 0.0 },
-    };
-    const indices: [6]c_uint = .{ 0, 1, 3, 1, 2, 3 };
-
-    gl.BindVertexArray(VAO[0]);
-    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[0]);
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO[0]);
-
-    //put aboue data in gpu
-    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, gl.STATIC_DRAW);
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, gl.STATIC_DRAW);
-
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), 0);
-    gl.EnableVertexAttribArray(0);
-    program.*.use();
-    gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
 }
 
 test "tester" {
