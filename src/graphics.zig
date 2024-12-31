@@ -10,8 +10,8 @@ const freetype = @cImport({
     @cInclude("freetype2/freetype/freetype.h");
     @cInclude("freetype2/ft2build.h");
 });
-const segments = 16;
-var curserpos: [2]f64 = undefined;
+
+var curserpos: [2]f32 = undefined;
 
 fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
     _ = scancode;
@@ -19,9 +19,9 @@ fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action
     if ((key == glfw.Key.escape) and (action == glfw.Action.press)) {
         main.running = false;
     }
-    const step: f64 = 1.0;
+    const step: f32 = 1.0;
     if (action == glfw.Action.press) {
-        var vect: [2]f64 = .{ 0.0, 0.0 };
+        var vect: [2]f32 = .{ 0.0, 0.0 };
         if ((key == glfw.Key.up)) {
             vect = .{ 0.0, step };
         }
@@ -54,29 +54,13 @@ fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action
 
 fn cursorposcallback(_: glfw.Window, xpos: f64, ypos: f64) void {
     const converted = [2]f64{ @as(f64, @floatFromInt(phy.simboundry[0])), @as(f64, @floatFromInt(phy.simboundry[1])) };
-    curserpos[0] = (2 * xpos) - converted[0];
-    curserpos[1] = -((2 * ypos) - converted[1]);
+    curserpos[0] = @floatCast((2 * xpos) - converted[0]);
+    curserpos[1] = @floatCast(-((2 * ypos) - converted[1]));
     //std.debug.print("{any}\n", .{curserpos});
 }
 
 fn errorcallback(err: glfw.ErrorCode, decsription: [:0]const u8) void {
     std.log.err("glfw error code{any}--{any}", .{ err, decsription });
-}
-
-fn trisphere(rawx: f32, rawy: f32, radius: f32, segment: usize) void {
-    const boundry: [2]f32 = .{ @floatFromInt(phy.simboundry[0]), @floatFromInt(phy.simboundry[1]) };
-    gl.Begin(gl.TRIANGLE_FAN);
-    gl.Color3f(1.0, 0, 0);
-    gl.Vertex2f(rawx / boundry[0], rawy / boundry[1]);
-    gl.Color3f(0.0, 0, 1.0);
-    for (0..(segment + 1)) |i| {
-        const theta = 2.0 * math.pi * (@as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(segment)));
-
-        const cx = @as(f32, rawx + (radius * math.sin(theta)));
-        const cy = @as(f32, rawy + (radius * math.cos(theta)));
-        gl.Vertex2f(cx / boundry[0], cy / boundry[1]);
-    }
-    gl.End();
 }
 
 fn windowhandler(window: glfw.Window) void {
@@ -87,31 +71,27 @@ fn windowhandler(window: glfw.Window) void {
 }
 
 var procs: gl.ProcTable = undefined;
+pub var VAO: [16]c_uint = undefined;
+pub var VBO: [16]c_uint = undefined;
+pub var EBO: [16]c_uint = undefined;
 
 pub fn draw(lock: *std.Thread.Mutex) !void {
     std.log.info("render Thread started\n", .{});
     defer std.log.info("render Thread exited\n", .{});
 
-    if (!glfw.init(.{})) {
+    if (!glfw.init(.{ .platform = .wayland })) {
         std.log.err("Failed to initialize GLFW", .{});
         main.running = false;
         return;
     }
 
     defer glfw.terminate();
-    const window = glfw.Window.create(@intCast(phy.simboundry[0]), @intCast(phy.simboundry[1]), "OpenGL Fixed Function Triangle", null, null, .{ .context_version_major = 3, .context_version_minor = 2, .opengl_profile = .opengl_compat_profile }) orelse {
+    const window = glfw.Window.create(@intCast(phy.simboundry[0]), @intCast(phy.simboundry[1]), "OpenGL Fixed Function Triangle", null, null, .{ .context_version_major = 4, .context_version_minor = 6, .opengl_profile = .opengl_core_profile }) orelse {
         std.log.err("Failed to create GLFW window{any}", .{glfw.getErrorString()});
         main.running = false;
         return;
     };
     defer window.destroy();
-
-    //var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    //const allocator = gpa.allocator();
-    //var charecters = std.ArrayList(ui.charecter).init(allocator);
-    //defer charecters.deinit();
-    //try ui.initilizefreetype(&charecters);
-    //defer ui.deinitfreetype();
 
     //set window as opengl drawing context
     glfw.makeContextCurrent(window);
@@ -139,6 +119,22 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     //set size of opengl viewport
     gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
 
+    //initilize freetype
+    //try ui.initilizefreetype();
+    //defer ui.deinitfreetype();
+
+    //vertex array object
+    gl.GenVertexArrays(16, &VAO);
+    //vertex buffer object
+    gl.GenBuffers(16, &VBO);
+    //element buffer object
+    gl.GenBuffers(16, &EBO);
+
+    var programrect = util.Shader{};
+    programrect.init(util.vertexshadersource2, util.fragmentshadersource2);
+    var programsphere = util.Shader{};
+    programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
+
     // Main loop
     while (main.running) {
         // Clear the screen
@@ -147,23 +143,95 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
 
         // Render the circle
         lock.*.lock();
-        for (0..main.pointlistptrattribute.*.items.len) |i| {
-            trisphere(@floatCast(main.pointlistptrread.*.items[i].position[0]), @floatCast(main.pointlistptrread.*.items[i].position[1]), @floatCast(main.pointlistptrattribute.*.items[i].radius), segments);
-        }
+
+        //drawrect(&programrect);
+        sphereinit(16);
+        programsphere.use();
+
+        gl.DrawElements(gl.TRIANGLES, 48, gl.UNSIGNED_INT, 0);
         //ui.drawui(window);
-        trisphere(@floatCast(curserpos[0]), @floatCast(curserpos[1]), 50, 3);
 
         lock.*.unlock();
         // Swap buffers and poll events
         window.swapBuffers();
         glfw.pollEvents();
-        std.time.sleep(10000);
         windowhandler(window);
         framebuffer = window.getFramebufferSize();
         phy.simboundry = .{ @intCast(framebuffer.width), @intCast(framebuffer.height) };
         gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
     }
 }
+///creates an offset array for the sphere
+///function should be called before render loop
+fn sphereinit(segments: usize) void {
+    var offsetarray: [64][2]f32 = undefined;
+    offsetarray[0] = .{ 0.0, 0.0 };
+
+    var indices: [128]c_uint = undefined;
+    indices[0] = 0;
+    for (1..(segments + 2)) |index| {
+        const theta = 2.0 * math.pi * (@as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(segments)));
+
+        const cx = @as(f32, math.sin(theta));
+        const cy = @as(f32, math.cos(theta));
+        offsetarray[index] = .{ cx, cy };
+    }
+    for (0..(segments - 1)) |index| {
+        //0,1,2, 0,2,3, 0,3,4,0
+        indices[(index * 3)] = 0;
+        indices[(index * 3) + 1] = @intCast(index + 1);
+        indices[(index * 3) + 2] = @intCast(index + 2);
+    }
+    indices[(segments - 1) * 3] = 0;
+    indices[((segments - 1) * 3) + 1] = @intCast(segments);
+    indices[((segments - 1) * 3) + 2] = 1;
+
+    gl.BindVertexArray(VAO[1]);
+    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[1]);
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO[1]);
+
+    gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * (segments + 1)), &offsetarray[0][0], gl.STATIC_DRAW);
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, gl.STATIC_DRAW);
+
+    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, @sizeOf([2]f32), 0);
+    gl.EnableVertexAttribArray(0);
+}
+
+fn drawspheres(program: *util.Shader) void {
+    gl.BindVertexArray(VAO[1]);
+    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[2]);
+    gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * main.pointlistptrread.*.items.len), &main.pointlistptrread.*.items[0], gl.STATIC_DRAW);
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, @sizeOf([2]f32), 0);
+    gl.EnableVertexAttribArray(1);
+
+    program.*.use();
+    gl.DrawArraysInstanced(gl.TRIANGLE_FAN, 0, 18, @intCast(main.pointlistptrread.items.len));
+}
+
+fn drawrect(program: *util.Shader) void {
+    //declare vertices and indexes
+    const vertices: [4][3]f32 = .{
+        .{ 0.5, 0.5, 0.0 },
+        .{ 0.5, -0.5, 0.0 },
+        .{ -0.5, -0.5, 0.0 },
+        .{ -0.5, 0.5, 0.0 },
+    };
+    const indices: [6]c_uint = .{ 0, 1, 3, 1, 2, 3 };
+
+    gl.BindVertexArray(VAO[0]);
+    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[0]);
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO[0]);
+
+    //put aboue data in gpu
+    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(vertices)), &vertices, gl.STATIC_DRAW);
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, gl.STATIC_DRAW);
+
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), 0);
+    gl.EnableVertexAttribArray(0);
+    program.*.use();
+    gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
+}
+
 test "tester" {
     try std.testing.expect(true);
 }

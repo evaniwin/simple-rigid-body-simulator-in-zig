@@ -5,6 +5,7 @@ const math = std.math;
 const main = @import("main.zig");
 const util = @import("utility.zig");
 const phy = @import("physics.zig");
+const graphics = @import("graphics.zig");
 const freetype = @cImport({
     @cInclude("freetype2/freetype/freetype.h");
     @cInclude("freetype2/ft2build.h");
@@ -12,78 +13,54 @@ const freetype = @cImport({
 
 var ft: freetype.FT_Library = undefined;
 var face: freetype.FT_Face = undefined;
-var VAO: c_uint = undefined;
-var VBO: c_uint = undefined;
+var charecters: [128]charecter = undefined;
 
 pub const charecter = struct {
     Textureid: c_uint, // ID handle of the glyph texture
-    size: [2]i32, // Size of glyph
-    bearing: [2]i32, // Offset from baseline to left/top of glyph
-    Advance: c_uint, // Offset to advance to next glyph
+    size: [2]c_uint, // Size of glyph
+    bearing: [2]c_int, // Offset from baseline to left/top of glyph
+    Advance: c_long, // Offset to advance to next glyph
 
 };
 
-pub fn initilizefreetype(charecters: *std.ArrayList(charecter)) !void {
-    if (freetype.FT_Init_FreeType(&ft) != 0) {
+pub fn initilizefreetype() !void {
+    if (freetype.FT_Init_FreeType(&ft) != freetype.FT_Err_Ok) {
         std.log.err("Failed to initialize freetype liberary", .{});
-        main.running = false;
+        //main.running = false;
         return;
     }
 
-    if (freetype.FT_New_Face(ft, "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 0, &face) != 0) {
+    if (freetype.FT_New_Face(ft, "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 0, &face) != freetype.FT_Err_Ok) {
         std.log.err("Failed to load freetype face", .{});
-        main.running = false;
+        //main.running = false;
         return;
     }
 
     _ = freetype.FT_Set_Pixel_Sizes(face, 0, 48);
-    gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1);
+    gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1);
     for (0..128) |i| {
-        if (freetype.FT_Load_Char(face, i, freetype.FT_LOAD_RENDER) != 0) {
+        if (freetype.FT_Load_Char(face, i, freetype.FT_LOAD_RENDER) != freetype.FT_Err_Ok) {
             std.log.err("Failed to load freetype glyph", .{});
-            main.running = false;
+            //main.running = false;
             return;
         }
-        var texture: c_uint = undefined;
-        gl.glGenTextures(@as(c_int, 1), &texture);
-        gl.glBindTexture(gl.GL_TEXTURE_2D, texture);
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RED, @intCast(face.*.glyph.*.bitmap.width), @intCast(face.*.glyph.*.bitmap.rows), 0, gl.GL_RED, gl.GL_UNSIGNED_BYTE, face.*.glyph.*.bitmap.buffer);
+        var texture: [1]c_uint = undefined;
+        gl.GenTextures(1, &texture);
+        gl.BindTexture(gl.TEXTURE_2D, texture[0]);
 
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE);
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE);
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR);
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR);
-
-        const chartex: charecter = charecter{
-            .Textureid = texture,
-            .size = .{ @intCast(face.*.glyph.*.bitmap.width), @intCast(face.*.glyph.*.bitmap.rows) },
-            .bearing = .{ face.*.glyph.*.bitmap_left, face.*.glyph.*.bitmap_top },
-            .Advance = @intCast(face.*.glyph.*.advance.x),
-        };
-
-        try charecters.*.append(chartex);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RED, @intCast(face.*.glyph.*.bitmap.width), @intCast(face.*.glyph.*.bitmap.rows), 0, gl.RED, gl.UNSIGNED_BYTE, face.*.glyph.*.bitmap.buffer);
+        charecters[i] = charecter{ .Textureid = texture[0], .size = .{ face.*.glyph.*.bitmap.width, face.*.glyph.*.bitmap.rows }, .bearing = .{ face.*.glyph.*.bitmap_left, face.*.glyph.*.bitmap_top }, .Advance = @intCast(face.*.glyph.*.advance.x) };
     }
-    gl.glEnable(gl.GL_BLEND);
-    gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA);
+    gl.Enable(gl.BLEND);
+    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    //FIXME fix this
-    const glGenVertexArrays = gl.glGenVertexArrays;
-    const glGenBuffers = gl.glGenBuffers;
-    const glBindVertexArray = gl.glBindVertexArray;
-    const glBindBuffer = gl.glBindBuffer;
-    const glBufferData = gl.glBufferData;
-    const glEnableVertexAttribArray = gl.glEnableVertexAttribArray;
-    const glVertexAttribPointer = gl.glVertexAttribPointer;
-
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-    glBindBuffer(gl.GL_ARRAY_BUFFER, VBO);
-    glBufferData(gl.GL_ARRAY_BUFFER, @sizeOf(f32) * 6 * 4, null, gl.GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 4, @sizeOf(f32), gl.GL_FALSE, 4 * @sizeOf(f32), @ptrFromInt(0));
-    glBindBuffer(gl.GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * 6 * 4, null, gl.DYNAMIC_DRAW);
+    gl.VertexAttribPointer(0, 4, @sizeOf(f32), gl.FALSE, 4 * @sizeOf(f32), 0);
+    std.log.info("initilized freetype", .{});
 }
 
 pub fn deinitfreetype() void {
@@ -91,34 +68,52 @@ pub fn deinitfreetype() void {
     _ = freetype.FT_Done_FreeType(ft);
 }
 
-fn drawtext() void {}
+fn drawtext(shader: *util.Shader, text: []const u8, posconst: [2]f32, scale: f32, colour: [3]f32) void {
+    shader.*.use();
+    gl.Uniform3f(gl.GetUniformLocation(shader.*.program, "textcolour"), colour[0], colour[1], colour[2]);
+    gl.ActiveTexture(gl.TEXTURE0);
+    gl.BindVertexArray(graphics.VAO[0]);
+    var pos = posconst;
 
-fn drawbutton(x: f32, y: f32, width: f32, height: f32) void {
-    gl.glBegin(gl.GL_TRIANGLES);
-    gl.glVertex2f(x - width, y - height);
-    gl.glVertex2f(x + width, y - height);
-    gl.glVertex2f(x - width, y + height);
-    // |\
-    // |  \
-    // |_____\
-    gl.glVertex2f(x + width, y + height);
-    gl.glVertex2f(x + width, y - height);
-    gl.glVertex2f(x - width, y + height);
-    // \-----|
-    //   \   |
-    //      \|
+    //iterate through input string
+    for (text) |char| {
+        const charstruct = charecters[char];
+        const poschar: [2]f32 = .{ @as(f32, @floatFromInt(charstruct.bearing[0])) * scale, (@as(f32, @floatFromInt(charstruct.size[1])) - @as(f32, @floatFromInt(charstruct.bearing[1]))) * scale };
+        // width and height of charecter
+        const sizechar: [2]f32 = .{ @as(f32, @floatFromInt(charstruct.size[0])) * scale, @as(f32, @floatFromInt(charstruct.size[1])) * scale };
 
-    gl.glEnd();
+        //vertices
+        const vertices: [6][4]f32 = .{
+            .{ poschar[0], poschar[1] + sizechar[1], 0.0, 0.0 },
+            .{ poschar[0], poschar[1], 0.0, 1.0 },
+            .{ poschar[0] + sizechar[0], poschar[1], 1.0, 1.0 },
+
+            .{ poschar[0], poschar[1] + sizechar[1], 0.0, 0.0 },
+            .{ poschar[0] + sizechar[0], poschar[1], 1.0, 1.0 },
+            .{ poschar[0] + sizechar[0], poschar[1] + sizechar[1], 1.0, 0.0 },
+        };
+        
+        std.log.info("verticer{any}", .{vertices});
+        // render glyph texture over quad
+        gl.BindTexture(gl.TEXTURE_2D, charstruct.Textureid);
+        // update content of VBO memory
+        gl.BindBuffer(gl.ARRAY_BUFFER, graphics.VBO[0]);
+        gl.BufferSubData(gl.ARRAY_BUFFER, 0, @sizeOf(@TypeOf(vertices)), &vertices);
+        gl.BindBuffer(gl.ARRAY_BUFFER, 0);
+        // render quad
+        gl.DrawArrays(gl.TRIANGLES, 0, 6);
+        // now advance cursors for next glyph (note that advance is number of 1/64 pixels)
+        pos[0] += @as(f32, @floatFromInt(charstruct.Advance >> 6)) * scale; // bitshift by 6 to get value in pixels (2^6 = 64)
+
+    }
+    gl.BindVertexArray(graphics.VAO[0]);
+    gl.BindTexture(gl.TEXTURE_2D, 0);
 }
+//TODO
+pub fn drawui(_: glfw.Window) void {
+    var shader = util.Shader{};
+    //compile shader program
+    shader.init(util.vertexshadersource, util.fragmentshadersource);
 
-pub fn drawui(_: ?*glfw.GLFWwindow) void {
-    const bounds: [2]f32 = .{ @floatFromInt(phy.simboundry[0]), @floatFromInt(phy.simboundry[1]) };
-
-    gl.glColor4f(0.5, 0.5, 0.5, 1);
-    drawbutton(0, 1, 1, 100 / bounds[1]);
-
-    const mainbuttonaligntop: f32 = 50;
-    const button: [2]f32 = [2]f32{ 60, 30 };
-    gl.glColor4f(0.6, 0.6, 0.6, 1);
-    drawbutton(-1 + (100 / bounds[0]), 1 - mainbuttonaligntop / bounds[1], button[0] / bounds[0], button[1] / bounds[1]);
+    drawtext(&shader, "This is sample text", .{ 25.0, 25.0 }, 0.1, .{ 0.9, 0.8, 0.2 });
 }
