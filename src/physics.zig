@@ -7,7 +7,7 @@ const math = std.math;
 const util = @import("utility.zig");
 const time = std.time;
 
-pub var simboundry: [2]c_int = [2]c_int{ 1200, 800 };
+pub var simboundry: [2]f32 = [2]f32{ 1200, 800 };
 pub const drag: f32 = 0.0001;
 const recoil: f32 = 0.9;
 
@@ -57,7 +57,7 @@ fn forcecollision(ind: usize) void {
 /// 'boundrycollition' Calculates collision with boundry
 fn boundrycollition(ind: usize) void {
     //Adust the boundry so when the surface of the sphere touches the boundry collision occours
-    const boundary: [2]f32 = [2]f32{ @as(f32, @floatFromInt(simboundry[0])) - main.pointlistptrattribute.*.items[ind].radius, @as(f32, @floatFromInt(simboundry[1])) - main.pointlistptrattribute.*.items[ind].radius };
+    const boundary: [2]f32 = [2]f32{ simboundry[0] - main.pointlistptrattribute.*.items[ind].radius, simboundry[1] - main.pointlistptrattribute.*.items[ind].radius };
     var force: [2]f32 = [2]f32{ 0, 0 };
     const pos = main.pointlistptrread.*.items[ind];
     //calculates rebound
@@ -198,14 +198,14 @@ test "boundrycollition" {
     try std.testing.expectEqualSlices(f32, &ref, &pointlist_attrib.items[0].velocity);
     try std.testing.expectEqualSlices(f32, &ref, &pointlist_attrib.items[0].force);
     //test collision top and right
-    pointlist_1.items[0] = [2]f32{ @as(f32, @floatFromInt(simboundry[0])) - main.pointlistptrattribute.*.items[0].radius + 1.0, @as(f32, @floatFromInt(simboundry[1])) - main.pointlistptrattribute.*.items[0].radius + 1.0 };
+    pointlist_1.items[0] = [2]f32{ simboundry[0] - main.pointlistptrattribute.*.items[0].radius + 1.0, simboundry[1] - main.pointlistptrattribute.*.items[0].radius + 1.0 };
 
     boundrycollition(0);
     ref = [2]f32{ -1.0 * recoil, -1.0 * recoil };
     try std.testing.expectEqualSlices(f32, &ref, &pointlist_attrib.items[0].force);
 
     //test collision bottom and left
-    pointlist_1.items[0] = [2]f32{ -(@as(f32, @floatFromInt(simboundry[0])) - main.pointlistptrattribute.*.items[0].radius + 1.0), -(@as(f32, @floatFromInt(simboundry[1])) - main.pointlistptrattribute.*.items[0].radius + 1.0) };
+    pointlist_1.items[0] = [2]f32{ -(simboundry[0] - main.pointlistptrattribute.*.items[0].radius + 1.0), -(simboundry[1] - main.pointlistptrattribute.*.items[0].radius + 1.0) };
     pointlist_attrib.items[0].force = .{ 0.0, 0.0 };
     boundrycollition(0);
     ref = [2]f32{ 1.0 * recoil, 1.0 * recoil };
