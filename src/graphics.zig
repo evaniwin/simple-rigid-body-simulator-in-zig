@@ -39,12 +39,7 @@ fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action
             util.packet.reset = true;
             util.packet.mutex.unlock();
         }
-        if (key == glfw.Key.end) {
-            util.packet.mutex.lock();
-            util.packet.que = true;
-            util.packet.item = curserpos;
-            util.packet.mutex.unlock();
-        }
+
         if (key == glfw.Key.tab) {
             try phy.printparticle();
         }
@@ -52,10 +47,18 @@ fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action
     }
 }
 
+fn mousebuttoncallback(_: glfw.Window, button: glfw.MouseButton, action: glfw.Action, _: glfw.Mods) void {
+    if (button == glfw.MouseButton.left and action == glfw.Action.press) {
+        util.packet.mutex.lock();
+        util.packet.que = true;
+        util.packet.item = curserpos;
+        util.packet.mutex.unlock();
+    }
+}
+
 fn cursorposcallback(_: glfw.Window, xpos: f64, ypos: f64) void {
-    const converted = [2]f64{ @as(f64, @floatFromInt(phy.simboundry[0])), @as(f64, @floatFromInt(phy.simboundry[1])) };
-    curserpos[0] = @floatCast((2 * xpos) - converted[0]);
-    curserpos[1] = @floatCast(-((2 * ypos) - converted[1]));
+    curserpos[0] = 2 * @as(f32, @floatCast(xpos)) - phy.simboundry[0];
+    curserpos[1] = -(2 * @as(f32, @floatCast(ypos)) - phy.simboundry[1]);
     //std.debug.print("{any}\n", .{curserpos});
 }
 
@@ -68,6 +71,13 @@ fn windowhandler(window: glfw.Window) void {
         std.log.warn("stop condition", .{});
         main.running = false;
     }
+}
+//opengl viewport update
+fn viewportsizeupdate(window: glfw.Window) void {
+    //opengl viewport update
+    const framebuffer: glfw.Window.Size = window.getFramebufferSize();
+    phy.simboundry = .{ @floatFromInt(framebuffer.width), @floatFromInt(framebuffer.height) };
+    gl.Viewport(0, 0, @intFromFloat(phy.simboundry[0]), @intFromFloat(phy.simboundry[1]));
 }
 //orthographic projection matrix
 fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) [4][4]f32 {
@@ -94,7 +104,7 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     }
 
     defer glfw.terminate();
-    const window = glfw.Window.create(@intCast(phy.simboundry[0]), @intCast(phy.simboundry[1]), "Physics Simulator", null, null, .{ .context_version_major = 4, .context_version_minor = 6, .opengl_profile = .opengl_core_profile }) orelse {
+    const window = glfw.Window.create(@intFromFloat(phy.simboundry[0]), @intFromFloat(phy.simboundry[1]), "Physics Simulator", null, null, .{ .context_version_major = 4, .context_version_minor = 6, .opengl_profile = .opengl_core_profile }) orelse {
         std.log.err("Failed to create GLFW window{any}", .{glfw.getErrorString()});
         main.running = false;
         return;
@@ -120,12 +130,7 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     glfw.setErrorCallback(errorcallback);
     window.setKeyCallback(keycallback);
     window.setCursorPosCallback(cursorposcallback);
-
-    //opengl viewport
-    var framebuffer: glfw.Window.Size = window.getFramebufferSize();
-    phy.simboundry = .{ @intCast(framebuffer.width), @intCast(framebuffer.height) };
-    //set size of opengl viewport
-    gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
+    window.setMouseButtonCallback(mousebuttoncallback);
 
     gl.Enable(gl.CULL_FACE);
     gl.Enable(gl.BLEND);
@@ -146,7 +151,6 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
 
     var programsphere = util.Shader{};
     programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
-    const screen = gl.GetUniformLocation(programsphere.program, "screen");
     sphereinit(16);
     ui.initilizefreetype();
     // Main loop
@@ -158,19 +162,19 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
 
         // Render the circle
         lock.*.lock();
-        updateuniforms(&programtext);
-        drawspheres(&programsphere, screen);
+
+        updateuniforms(&programtext, &programsphere);
+        drawspheres(&programsphere);
         //ui.drawrect(&programtri);
-        ui.drawtext(&programtext, "use arrow keys to add force and press end key to add particle", .{ 20.0, 10.0 }, 0.4, .{ 1.0, 1.0, 1.0 });
+        ui.drawtext(&programtext, "use arrow keys to add force and use left mouse button to add particle", .{ 20.0, 10.0 }, 0.4, .{ 1.0, 1.0, 1.0 });
+
         lock.*.unlock();
+
         // Swap buffers and poll events
         window.swapBuffers();
         glfw.pollEvents();
         windowhandler(window);
-        framebuffer = window.getFramebufferSize();
-        phy.simboundry = .{ @intCast(framebuffer.width), @intCast(framebuffer.height) };
-        gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
-        //gl.Viewport(0, 0, 800, 600);
+        viewportsizeupdate(window);
 
         //opengl error report
         var err: gl.@"enum" = 1;
@@ -183,10 +187,13 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
         }
     }
 }
-fn updateuniforms(a: *util.Shader) void {
+fn updateuniforms(a: *util.Shader, b: *util.Shader) void {
+    var projection = orthographic(0.0, phy.simboundry[0], 0.0, phy.simboundry[1], -1.0, 1.0);
     a.*.use();
-    const projection = orthographic(0.0, @floatFromInt(phy.simboundry[0]), 0.0, @floatFromInt(phy.simboundry[1]), -1.0, 1.0);
     gl.UniformMatrix4fv(gl.GetUniformLocation(a.*.program, "projection"), 1, gl.TRUE, &projection[0][0]);
+    b.*.use();
+    projection = orthographic(-phy.simboundry[0], phy.simboundry[0], -phy.simboundry[1], phy.simboundry[1], -1.0, 1.0);
+    gl.UniformMatrix4fv(gl.GetUniformLocation(b.*.program, "projection"), 1, gl.TRUE, &projection[0][0]);
 }
 
 ///creates an offset array for the sphere
@@ -225,7 +232,7 @@ fn sphereinit(segments: usize) void {
     gl.EnableVertexAttribArray(0);
 }
 
-fn drawspheres(program: *util.Shader, screen: c_int) void {
+fn drawspheres(program: *util.Shader) void {
     gl.BindVertexArray(VAO[0]);
     gl.BindBuffer(gl.ARRAY_BUFFER, VBO[1]);
     gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * main.pointlistptrread.*.items.len), &main.pointlistptrread.*.items[0], gl.DYNAMIC_DRAW);
@@ -235,7 +242,6 @@ fn drawspheres(program: *util.Shader, screen: c_int) void {
     gl.VertexAttribDivisor(1, 1);
 
     program.*.use();
-    gl.Uniform2f(screen, @floatFromInt(phy.simboundry[0]), @floatFromInt(phy.simboundry[1]));
     gl.DrawElementsInstanced(gl.TRIANGLES, 48, gl.UNSIGNED_INT, @ptrFromInt(0), @intCast(main.pointlistptrread.items.len));
 }
 
