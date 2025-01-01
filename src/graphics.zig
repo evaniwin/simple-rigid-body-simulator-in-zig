@@ -3,7 +3,7 @@ const math = std.math;
 const phy = @import("physics.zig");
 const main = @import("main.zig");
 const util = @import("utility.zig");
-//const ui = @import("ui.zig");
+const ui = @import("ui.zig");
 const glfw = @import("mach-glfw");
 const gl = @import("gl");
 const freetype = @cImport({
@@ -19,8 +19,8 @@ fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action
     if ((key == glfw.Key.escape) and (action == glfw.Action.press)) {
         main.running = false;
     }
-    const step: f32 = 1.0;
-    if (action == glfw.Action.press) {
+    const step: f32 = 10.0;
+    if (action == glfw.Action.press or action == glfw.Action.repeat) {
         var vect: [2]f32 = .{ 0.0, 0.0 };
         if ((key == glfw.Key.up)) {
             vect = .{ 0.0, step };
@@ -69,7 +69,15 @@ fn windowhandler(window: glfw.Window) void {
         main.running = false;
     }
 }
-
+//orthographic projection matrix
+fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) [4][4]f32 {
+    return .{
+        .{ 2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left) },
+        .{ 0.0, 2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom) },
+        .{ 0.0, 0.0, -2.0 / (far - near), -(far + near) / (far - near) },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    };
+}
 var procs: gl.ProcTable = undefined;
 pub var VAO: [16]c_uint = undefined;
 pub var VBO: [16]c_uint = undefined;
@@ -86,7 +94,7 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     }
 
     defer glfw.terminate();
-    const window = glfw.Window.create(@intCast(phy.simboundry[0]), @intCast(phy.simboundry[1]), "OpenGL Fixed Function Triangle", null, null, .{ .context_version_major = 4, .context_version_minor = 6, .opengl_profile = .opengl_core_profile }) orelse {
+    const window = glfw.Window.create(@intCast(phy.simboundry[0]), @intCast(phy.simboundry[1]), "Physics Simulator", null, null, .{ .context_version_major = 4, .context_version_minor = 6, .opengl_profile = .opengl_core_profile }) orelse {
         std.log.err("Failed to create GLFW window{any}", .{glfw.getErrorString()});
         main.running = false;
         return;
@@ -119,9 +127,9 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     //set size of opengl viewport
     gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
 
-    //initilize freetype
-    //try ui.initilizefreetype();
-    //defer ui.deinitfreetype();
+    gl.Enable(gl.CULL_FACE);
+    gl.Enable(gl.BLEND);
+    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     //vertex array object
     gl.GenVertexArrays(16, &VAO);
@@ -130,26 +138,30 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     //element buffer object
     gl.GenBuffers(16, &EBO);
 
+    var programtext = util.Shader{};
+    programtext.init(util.vertexshadertext, util.fragmentshadertext);
+
+    var programtri = util.Shader{};
+    programtri.init(util.vertexshadertri, util.fragmentshadertri);
+
     var programsphere = util.Shader{};
     programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
     const screen = gl.GetUniformLocation(programsphere.program, "screen");
     sphereinit(16);
+    ui.initilizefreetype();
     // Main loop
+    //gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE);
     while (main.running) {
         // Clear the screen
-        gl.ClearColor(0.0, 0.1, 0.3, 1.0);
+        gl.ClearColor(0.2, 0.2, 0.3, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
         // Render the circle
         lock.*.lock();
-
-        //drawrect(&programrect);
-
+        updateuniforms(&programtext);
         drawspheres(&programsphere, screen);
-
-        gl.DrawElements(gl.TRIANGLES, 48, gl.UNSIGNED_INT, 0);
-        //ui.drawui(window);
-
+        //ui.drawrect(&programtri);
+        ui.drawtext(&programtext, "use arrow keys to add force and press end key to add particle", .{ 20.0, 10.0 }, 0.4, .{ 1.0, 1.0, 1.0 });
         lock.*.unlock();
         // Swap buffers and poll events
         window.swapBuffers();
@@ -158,8 +170,25 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
         framebuffer = window.getFramebufferSize();
         phy.simboundry = .{ @intCast(framebuffer.width), @intCast(framebuffer.height) };
         gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
+        //gl.Viewport(0, 0, 800, 600);
+
+        //opengl error report
+        var err: gl.@"enum" = 1;
+        while (err != gl.NO_ERROR) {
+            err = gl.GetError();
+            // Process/log the error.
+            if (err != gl.NO_ERROR) {
+                std.log.err("{any}", .{err});
+            }
+        }
     }
 }
+fn updateuniforms(a: *util.Shader) void {
+    a.*.use();
+    const projection = orthographic(0.0, @floatFromInt(phy.simboundry[0]), 0.0, @floatFromInt(phy.simboundry[1]), -1.0, 1.0);
+    gl.UniformMatrix4fv(gl.GetUniformLocation(a.*.program, "projection"), 1, gl.TRUE, &projection[0][0]);
+}
+
 ///creates an offset array for the sphere
 ///function should be called before render loop
 fn sphereinit(segments: usize) void {
@@ -169,7 +198,7 @@ fn sphereinit(segments: usize) void {
     var indices: [128]c_uint = undefined;
     indices[0] = 0;
     for (1..(segments + 2)) |index| {
-        const theta = 2.0 * math.pi * (@as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(segments)));
+        const theta = -2.0 * math.pi * (@as(f32, @floatFromInt(index)) / @as(f32, @floatFromInt(segments)));
 
         const cx = @as(f32, math.sin(theta));
         const cy = @as(f32, math.cos(theta));
@@ -185,9 +214,9 @@ fn sphereinit(segments: usize) void {
     indices[((segments - 1) * 3) + 1] = @intCast(segments);
     indices[((segments - 1) * 3) + 2] = 1;
 
-    gl.BindVertexArray(VAO[1]);
-    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[1]);
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO[1]);
+    gl.BindVertexArray(VAO[0]);
+    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[0]);
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO[0]);
 
     gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * (segments + 1)), &offsetarray[0][0], gl.STATIC_DRAW);
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(indices)), &indices, gl.STATIC_DRAW);
@@ -197,9 +226,9 @@ fn sphereinit(segments: usize) void {
 }
 
 fn drawspheres(program: *util.Shader, screen: c_int) void {
-    gl.BindVertexArray(VAO[1]);
-    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[2]);
-    gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * main.pointlistptrread.*.items.len), &main.pointlistptrread.*.items[0], gl.STATIC_DRAW);
+    gl.BindVertexArray(VAO[0]);
+    gl.BindBuffer(gl.ARRAY_BUFFER, VBO[1]);
+    gl.BufferData(gl.ARRAY_BUFFER, @intCast(@sizeOf([2]f32) * main.pointlistptrread.*.items.len), &main.pointlistptrread.*.items[0], gl.DYNAMIC_DRAW);
     //gl.BufferData(gl.ARRAY_BUFFER, @sizeOf([2]f32), &curserpos, gl.STATIC_DRAW);
     gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, @sizeOf([2]f32), 0);
     gl.EnableVertexAttribArray(1);
