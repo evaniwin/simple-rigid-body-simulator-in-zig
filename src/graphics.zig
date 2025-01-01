@@ -69,7 +69,15 @@ fn windowhandler(window: glfw.Window) void {
         main.running = false;
     }
 }
-
+//orthographic projection matrix
+fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) [4][4]f32 {
+    return .{
+        .{ 2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left) },
+        .{ 0.0, 2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom) },
+        .{ 0.0, 0.0, -2.0 / (far - near), -(far + near) / (far - near) },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    };
+}
 var procs: gl.ProcTable = undefined;
 pub var VAO: [16]c_uint = undefined;
 pub var VBO: [16]c_uint = undefined;
@@ -140,7 +148,7 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
     const screen = gl.GetUniformLocation(programsphere.program, "screen");
     sphereinit(16);
-    ui.initilizefreetype(&programtext);
+    ui.initilizefreetype();
     // Main loop
     //gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE);
     while (main.running) {
@@ -150,10 +158,10 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
 
         // Render the circle
         lock.*.lock();
-
+        updateuniforms(&programtext);
         drawspheres(&programsphere, screen);
         //ui.drawrect(&programtri);
-        ui.drawtext(&programtext, "use arrow keys to add force and press end key to add particle", .{ -1.0, 0.95 }, 0.001, .{ 1.0, 1.0, 1.0 });
+        ui.drawtext(&programtext, "use arrow keys to add force and press end key to add particle", .{ 20.0, 10.0 }, 0.4, .{ 1.0, 1.0, 1.0 });
         lock.*.unlock();
         // Swap buffers and poll events
         window.swapBuffers();
@@ -162,6 +170,7 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
         framebuffer = window.getFramebufferSize();
         phy.simboundry = .{ @intCast(framebuffer.width), @intCast(framebuffer.height) };
         gl.Viewport(0, 0, phy.simboundry[0], phy.simboundry[1]);
+        //gl.Viewport(0, 0, 800, 600);
 
         //opengl error report
         var err: gl.@"enum" = 1;
@@ -174,6 +183,12 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
         }
     }
 }
+fn updateuniforms(a: *util.Shader) void {
+    a.*.use();
+    const projection = orthographic(0.0, @floatFromInt(phy.simboundry[0]), 0.0, @floatFromInt(phy.simboundry[1]), -1.0, 1.0);
+    gl.UniformMatrix4fv(gl.GetUniformLocation(a.*.program, "projection"), 1, gl.TRUE, &projection[0][0]);
+}
+
 ///creates an offset array for the sphere
 ///function should be called before render loop
 fn sphereinit(segments: usize) void {

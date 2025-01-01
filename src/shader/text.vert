@@ -5,7 +5,7 @@ out vec2 TexCoords;
 uniform mat4 projection;
 
 void main()
-{
-    gl_Position = vec4(vertex.xy, 0.0, 1.0);
+{   vec4 pos = vec4(vertex.xy, 0.0, 1.0);
+    gl_Position = projection * pos;
     TexCoords = vertex.zw;
 }

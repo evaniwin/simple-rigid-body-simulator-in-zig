@@ -22,20 +22,8 @@ pub const charecter = struct {
     Advance: c_long, // Offset to advance to next glyph
 
 };
-//orthographic projection matrix
-fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) [4][4]f32 {
-    return .{
-        .{ 2.0 / (right - left), 0.0, 0.0, -(right + left) / (right - left) },
-        .{ 0.0, 2.0 / (top - bottom), 0.0, -(top + bottom) / (top - bottom) },
-        .{ 0.0, 0.0, -2.0 / (far - near), -(far + near) / (far - near) },
-        .{ 0.0, 0.0, 0.0, 1.0 },
-    };
-}
-pub fn initilizefreetype(shader: *util.Shader) void {
-    shader.*.use();
-    //const projection = orthographic(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
 
-    //gl.UniformMatrix4fv(gl.GetUniformLocation(shader.*.program, "projection"), 1, gl.FALSE, &projection[0][0]);
+pub fn initilizefreetype() void {
     if (freetype.FT_Init_FreeType(&ft) != freetype.FT_Err_Ok) {
         std.log.err("Failed to initialize freetype liberary", .{});
         //main.running = false;
