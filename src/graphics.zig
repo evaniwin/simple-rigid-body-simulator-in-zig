@@ -4,7 +4,9 @@ const phy = @import("physics.zig");
 const main = @import("main.zig");
 const util = @import("utility.zig");
 const ui = @import("ui.zig");
-const glfw = @import("mach-glfw");
+const glfw = @cImport({
+    @cInclude("GLFW/glfw3.h");
+});
 const gl = @import("gl");
 const freetype = @cImport({
     @cInclude("freetype2/freetype/freetype.h");
@@ -13,42 +15,43 @@ const freetype = @cImport({
 
 var curserpos: [2]f32 = undefined;
 
-fn keycallback(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
+fn keycallback(_: ?*glfw.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
     _ = scancode;
     _ = mods;
-    if ((key == glfw.Key.escape) and (action == glfw.Action.press)) {
+    if ((key == glfw.GLFW_KEY_ESCAPE) and (action == glfw.GLFW_PRESS)) {
         main.running = false;
     }
     const step: f32 = 10.0;
-    if (action == glfw.Action.press or action == glfw.Action.repeat) {
+    if (action == glfw.GLFW_PRESS or action == glfw.GLFW_REPEAT) {
         var vect: [2]f32 = .{ 0.0, 0.0 };
-        if ((key == glfw.Key.up)) {
+        if ((key == glfw.GLFW_KEY_UP)) {
             vect = .{ 0.0, step };
         }
-        if ((key == glfw.Key.down)) {
+        if ((key == glfw.GLFW_KEY_DOWN)) {
             vect = .{ 0.0, -step };
         }
-        if ((key == glfw.Key.right)) {
+        if ((key == glfw.GLFW_KEY_RIGHT)) {
             vect = .{ step, 0.0 };
         }
-        if ((key == glfw.Key.left)) {
+        if ((key == glfw.GLFW_KEY_LEFT)) {
             vect = .{ -step, 0.0 };
         }
-        if (key == glfw.Key.home) {
+        if (key == glfw.GLFW_KEY_HOME) {
             util.packet.mutex.lock();
             util.packet.reset = true;
             util.packet.mutex.unlock();
         }
 
-        if (key == glfw.Key.tab) {
+        if (key == glfw.GLFW_KEY_TAB) {
             try phy.printparticle();
         }
         phy.addforce(0, vect);
     }
 }
 
-fn mousebuttoncallback(_: glfw.Window, button: glfw.MouseButton, action: glfw.Action, _: glfw.Mods) void {
-    if (button == glfw.MouseButton.left and action == glfw.Action.press) {
+fn mousebuttoncallback(_: ?*glfw.GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.c) void {
+    _ = mods;
+    if (button == glfw.GLFW_MOUSE_BUTTON_LEFT and action == glfw.GLFW_PRESS) {
         util.packet.mutex.lock();
         util.packet.que = true;
         util.packet.item = curserpos;
@@ -56,27 +59,28 @@ fn mousebuttoncallback(_: glfw.Window, button: glfw.MouseButton, action: glfw.Ac
     }
 }
 
-fn cursorposcallback(_: glfw.Window, xpos: f64, ypos: f64) void {
+fn cursorposcallback(_: ?*glfw.GLFWwindow, xpos: f64, ypos: f64) callconv(.c) void {
     curserpos[0] = 2 * @as(f32, @floatCast(xpos)) - phy.simboundry[0];
     curserpos[1] = -(2 * @as(f32, @floatCast(ypos)) - phy.simboundry[1]);
     //std.debug.print("{any}\n", .{curserpos});
 }
 
-fn errorcallback(err: glfw.ErrorCode, decsription: [:0]const u8) void {
-    std.log.err("glfw error code{any}--{any}", .{ err, decsription });
+fn errorcallback(err: c_int, decsription: [*c]const u8) callconv(.c) void {
+    std.log.err("glfw error code{d}--{any}", .{ err, decsription });
 }
 
-fn windowhandler(window: glfw.Window) void {
-    if (glfw.Window.shouldClose(window)) {
+fn windowhandler(window: ?*glfw.GLFWwindow) void {
+    if (glfw.glfwWindowShouldClose(window) != 0) {
         std.log.warn("stop condition", .{});
         main.running = false;
     }
 }
 //opengl viewport update
-fn viewportsizeupdate(window: glfw.Window) void {
+fn viewportsizeupdate(window: ?*glfw.GLFWwindow) void {
     //opengl viewport update
-    const framebuffer: glfw.Window.Size = window.getFramebufferSize();
-    phy.simboundry = .{ @floatFromInt(framebuffer.width), @floatFromInt(framebuffer.height) };
+    var framebuffer: [2]c_int = undefined;
+    glfw.glfwGetFramebufferSize(window, &framebuffer[0], &framebuffer[1]);
+    phy.simboundry = .{ @floatFromInt(framebuffer[0]), @floatFromInt(framebuffer[1]) };
     gl.Viewport(0, 0, @intFromFloat(phy.simboundry[0]), @intFromFloat(phy.simboundry[1]));
 }
 //orthographic projection matrix
@@ -97,25 +101,27 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     std.log.info("render Thread started\n", .{});
     defer std.log.info("render Thread exited\n", .{});
 
-    if (!glfw.init(.{ .platform = .wayland })) {
+    if (glfw.glfwInit() == 0) {
         std.log.err("Failed to initialize GLFW", .{});
         main.running = false;
         return;
     }
-
-    defer glfw.terminate();
-    const window = glfw.Window.create(@intFromFloat(phy.simboundry[0]), @intFromFloat(phy.simboundry[1]), "Physics Simulator", null, null, .{ .context_version_major = 4, .context_version_minor = 6, .opengl_profile = .opengl_core_profile }) orelse {
-        std.log.err("Failed to create GLFW window{any}", .{glfw.getErrorString()});
+    defer glfw.glfwTerminate();
+    const window = glfw.glfwCreateWindow(@intFromFloat(phy.simboundry[0]), @intFromFloat(phy.simboundry[1]), "Physics Simulator", null, null);
+    if (window == null) {
+        var err: [*c]const u8 = undefined;
+        _ = glfw.glfwGetError(&err);
+        std.log.err("Failed to create GLFW window{s}", .{err});
         main.running = false;
         return;
-    };
-    defer window.destroy();
+    }
+    defer glfw.glfwDestroyWindow(window);
 
     //set window as opengl drawing context
-    glfw.makeContextCurrent(window);
-    defer glfw.makeContextCurrent(null);
+    glfw.glfwMakeContextCurrent(window);
+    defer glfw.glfwMakeContextCurrent(null);
     // Initialize the procedure table.
-    if (!procs.init(glfw.getProcAddress)) {
+    if (!procs.init(glfw.glfwGetProcAddress)) {
         std.log.err("Failed to initialize proc", .{});
         main.running = false;
         return;
@@ -124,13 +130,13 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     gl.makeProcTableCurrent(&procs);
     defer gl.makeProcTableCurrent(null);
 
-    glfw.swapInterval(1);
+    glfw.glfwSwapInterval(1);
 
     //set various callback functions
-    glfw.setErrorCallback(errorcallback);
-    window.setKeyCallback(keycallback);
-    window.setCursorPosCallback(cursorposcallback);
-    window.setMouseButtonCallback(mousebuttoncallback);
+    _ = glfw.glfwSetErrorCallback(errorcallback);
+    _ = glfw.glfwSetKeyCallback(window, keycallback);
+    _ = glfw.glfwSetCursorPosCallback(window, cursorposcallback);
+    _ = glfw.glfwSetMouseButtonCallback(window, mousebuttoncallback);
 
     gl.Enable(gl.CULL_FACE);
     gl.Enable(gl.BLEND);
@@ -144,13 +150,13 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
     gl.GenBuffers(16, &EBO);
 
     var programtext = util.Shader{};
-    programtext.init(util.vertexshadertext, util.fragmentshadertext);
+    try programtext.init(util.vertexshadertext, util.fragmentshadertext);
 
     var programtri = util.Shader{};
-    programtri.init(util.vertexshadertri, util.fragmentshadertri);
+    try programtri.init(util.vertexshadertri, util.fragmentshadertri);
 
     var programsphere = util.Shader{};
-    programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
+    try programsphere.init(util.vertexshadersphere, util.fragmentshadersphere);
     sphereinit(16);
     ui.initilizefreetype();
     // Main loop
@@ -165,14 +171,14 @@ pub fn draw(lock: *std.Thread.Mutex) !void {
 
         updateuniforms(&programtext, &programsphere);
         drawspheres(&programsphere);
-        //ui.drawrect(&programtri);
+        ui.drawtopbar(&programtri, &programtext);
         ui.drawtext(&programtext, "use arrow keys to add force and use left mouse button to add particle", .{ 20.0, 10.0 }, 0.4, .{ 1.0, 1.0, 1.0 });
 
         lock.*.unlock();
 
         // Swap buffers and poll events
-        window.swapBuffers();
-        glfw.pollEvents();
+        glfw.glfwSwapBuffers(window);
+        glfw.glfwPollEvents();
         windowhandler(window);
         viewportsizeupdate(window);
 

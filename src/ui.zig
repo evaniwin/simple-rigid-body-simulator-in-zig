@@ -1,11 +1,13 @@
 const gl = @import("gl");
-const glfw = @import("mach-glfw");
 const std = @import("std");
 const math = std.math;
 const main = @import("main.zig");
 const util = @import("utility.zig");
 const phy = @import("physics.zig");
 const graphics = @import("graphics.zig");
+const glfw = @cImport({
+    @cInclude("GLFW/glfw3.h");
+});
 const freetype = @cImport({
     @cInclude("freetype2/freetype/freetype.h");
     @cInclude("freetype2/ft2build.h");
@@ -143,12 +145,19 @@ pub fn drawtext(shader: *util.Shader, text: []const u8, posconst: [2]f32, scale:
     }
 }
 
-pub fn drawrect(shader: *util.Shader) void {
+pub fn drawtopbar(shader: *util.Shader, texshader: *util.Shader) void {
+    shader.*.use();
+    //gl.UniformMatrix4fv(gl.GetUniformLocation(shader.*.program, "projection"), count: sizei, transpose: boolean, value: [*c]const float);
+    drawrect(shader, .{ 0.5, 0.5 }, .{ 0.1, 0.1 });
+    drawtext(texshader, "button", .{ 200.0, 100.0 }, 0.4, .{ 1.0, 1.0, 1.0 });
+}
+
+fn drawrect(shader: *util.Shader, size: [2]f32, position: [2]f32) void {
     const vertices: [4][2]f32 = .{
-        .{ 0.0, 0.0 },
-        .{ 0.5, 0.5 },
-        .{ 0.0, 0.5 },
-        .{ 0.5, 0.0 },
+        .{ position[0], position[1] },
+        .{ position[0] + size[0], position[1] + size[1] },
+        .{ position[0], position[1] + size[1] },
+        .{ position[0] + size[0], position[1] },
     };
     const indeces: [6]c_uint = .{ 0, 1, 2, 0, 3, 1 };
     gl.BindVertexArray(graphics.VAO[10]);

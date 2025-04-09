@@ -7,7 +7,7 @@ pub var running: bool = true;
 pub var pointlistptrread: *std.ArrayList([2]f32) = undefined;
 pub var pointlistptrwrite: *std.ArrayList([2]f32) = undefined;
 pub var pointlistptrattribute: *std.ArrayList(phy.pointattribute) = undefined;
-
+pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 ///add a new particle to the list
 pub fn pointadd(values: [2]f32) !void {
     try pointlistptrread.*.append(values);
@@ -23,7 +23,6 @@ pub fn flipreadwrite() void {
 }
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     std.log.info("Execution of {s} started\n", .{"main"});
     //initilize memory
